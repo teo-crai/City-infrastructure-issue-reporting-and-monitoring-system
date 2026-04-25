@@ -1,0 +1,21 @@
+./city_manager --role inspector --user bob --add downtown
+./city_manager --role inspector --user bob --add downtown
+./city_manager --role inspector --user bob --add downtown
+./city_manager --role inspector --user bob --add downtown
+./city_manager --role inspector --user bob --add downtown
+
+./city_manager --role manager --user alice --list downtown
+
+./city_manager --role manager --user alice --view downtown 2
+
+./city_manager --role manager --user alice --update_treshold downtown 2
+
+./city_manager --role manager --user alice --filter downtown "sev_lvl:==:3"
+
+./city_manager --role manager --user alice --remove_report downtown 1
+./city_manager --role manager --user alice --remove_report downtown 5
+./city_manager --role manager --user alice --remove_report downtown 3
+
+./city_manager --role manager --user alice --list downtown
+
+cat downtown/logged_district

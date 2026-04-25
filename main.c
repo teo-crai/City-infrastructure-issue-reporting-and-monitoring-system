@@ -353,6 +353,68 @@ void update_treshold(char *district_id,int value,char *role,char *user) {
     close(fd);
     write_in_log(district_id, role, user, "update_treshold", time(NULL)); //log in the update
 }
+// AI-GENERATED: Function to parse a condition string like "sev_lvl > 1"
+int parse_condition(const char *cond_str, char *field, char *op, char *val) {
+    // Expected format: "field:op:value"
+    if (sscanf(cond_str, "%s:%s:%s", field, op, val) != 3) {
+        return 0; // Failed to parse
+    }
+    return 1;
+}
+// AI-GENERATED: Function to check if a report matches the parsed condition
+int match_condition(Report r, const char *field, const char *op, const char *val) {
+    if (strcmp(field, "sev_lvl") == 0) {
+        int v = atoi(val);
+        if (strcmp(op, "==") == 0) return r.sev_lvl == v;
+        if (strcmp(op, ">") == 0)  return r.sev_lvl > v;
+        if (strcmp(op, "<") == 0)  return r.sev_lvl < v;
+    }
+    else if (strcmp(field, "issue_categ") == 0) {
+        if (strcmp(op, "==") == 0) return strcmp(r.issue_categ, val) == 0;
+    }
+    else if (strcmp(field, "id") == 0) {
+        int v = atoi(val);
+        if (strcmp(op, "==") == 0) return r.id == v;
+    }
+    else if (strcmp(field, "ins_name") == 0) {
+        if (strcmp(op, "==") == 0) return strcmp(r.ins_name, val) == 0;
+    }
+    return 0; // No match or unknown field
+}
+void filter(char *district_id,char *condition,char *role,char *user) {
+    char path[512];
+    snprintf(path, sizeof(path), "%s/reports.dat", district_id);
+    //check read permissions for file
+    if (check_permission(path, role, 'r')==0) {
+        printf("Error: %s does not have permission to read file",user);
+        return;
+    }
+    //open file for reading
+    int fd = open(path, O_RDONLY);
+    if (fd == -1) {
+        printf("Could not open file for reading");
+        return;
+    }
+    //call parse function
+    char field[30], op[5], val[100];
+    if (!parse_condition(condition, field, op, val)) {
+        printf("Invalid condition format.'\n");
+        return;
+    }
+    Report rep;
+    int rep_count=0; //variable that counts the number of reports that match the condition/s
+    //loop through file until we find the report/s
+    while (read(fd,&rep,sizeof(Report))==sizeof(Report)) {
+        //call match function
+        if (match_condition(rep,field, op, val)) {
+            rep_count++;
+            printf("Report %d submitted by %s at %lld , at coordinates: %.4f %.4f: issue category(%s),severity level(%d),description(%s)\n",rep.id,rep.ins_name,rep.timestamp,rep.gps.lat,rep.gps.lng,rep.issue_categ,rep.sev_lvl,rep.desc);
+        }
+    }
+    if (rep_count==0) printf("No report matches given condition."); //display message if no matching reports were found
+    close(fd);
+    write_in_log(district_id, role, user, "filter", time(NULL));
+}
 int main(int argc, char * argv[]) {
     /*  uncomment on linux -> lstat() is posix only
     //check for dangling symbolic links
@@ -395,7 +457,7 @@ int main(int argc, char * argv[]) {
         update_treshold(dir,val,role,name);
     }
     if(strstr(command,"filter")){
-
+        filter(dir, argv[7], role, name);
     }
     return 0;
 }
