@@ -5,6 +5,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <fcntl.h>
+#include <unistd.h>
+#include <dirent.h>
 typedef struct {
     float lat,lng; //latitude and longitude
 }GPS_coord;
@@ -72,33 +74,87 @@ int check_permission(char const *path, char const *role, char action) { //path->
 
     return 1;
 }
-int report_count=0; //global variable to count number of reports and assign a report id
-void add_report(char *district_id,char *role,char *user) {
-    struct stat st;
-    if (stat(district_id, &st) == -1)
-        mkdir(district_id,0750); //function fails if directory already exists
-    //does not work the same on windows
-    //create report file
+void write_in_log(char *district_id,char *role,char *user,char *command,time_t timestamp)
+{
     char path[128];
-    snprintf(path, sizeof(path), "%s/reports.dat", district_id);
-    chmod(path, 0664); //set specified permissions
-    //prepare data
-    Report new_report;
-    new_report.id = report_count++;
-    strcpy(new_report.ins_name, user);
-    new_report.gps.lat = 45.0;
-    new_report.gps.lng = 25.0;
-    strcpy(new_report.issue_categ, "road");
-    new_report.sev_lvl = 2;
-    new_report.timestamp = time(NULL);
-    strcpy(new_report.desc, "some desc");
+    snprintf(path, sizeof(path), "%s/logged_district", district_id);
     //check for necessary permissions
     if (check_permission(path, role, 'w')==0) {
         printf("Error: %s %s does not have permission to write in file.",role,user);
         return;
     }
+    FILE *f=fopen(path,"a");
+    fprintf(f,"%lld    %s  %s  %s\n",timestamp,role,user,command);
+    fclose(f);
+}
+void manage_symlink(const char *district_id, const char *target_path) {
+    char link_name[128];
+    snprintf(link_name, sizeof(link_name), "active_reports-%s", district_id);
+    #ifdef _WIN32
+    #else
+    // Remove existing link if it exists to avoid errors, then recreate
+    unlink(link_name);
+    if (symlink(target_path, link_name) == -1) {
+        perror("Failed to create symbolic link");
+    }
+    #endif
+}
+void add_report(char *district_id,char *role,char *user) {
+    struct stat st;
+    if (stat(district_id, &st) == -1) {
+        if (mkdir(district_id, 0750) == -1) { //<-for linux
+        //if (mkdir(district_id)==-1){   //<-for windows
+            perror("Failed to create district directory");
+            return;
+        }
+    }
+    chmod(district_id, 0750);//set permission for directory
+    //does not work the same on windows
+    //create files
+    char path_dat[128], path_cfg[128], path_log[128];
+    snprintf(path_dat, sizeof(path_dat), "%s/reports.dat", district_id);
+    snprintf(path_cfg, sizeof(path_cfg), "%s/district.cfg", district_id);
+    snprintf(path_log, sizeof(path_log), "%s/logged_district", district_id);
+    //initialize district.cfg if it doesn't exist
+    if (stat(path_cfg, &st) == -1) {
+        int fd_cfg = open(path_cfg, O_WRONLY | O_CREAT | O_TRUNC, 0640);
+        if (fd_cfg != -1) {
+            write(fd_cfg, "1", 1); //default severity threshold
+            close(fd_cfg);
+            chmod(path_cfg, 0640); //set specified permissions
+        }
+    }
+    //initialize logged_district if it doesn't exist
+    if (stat(path_log, &st) == -1) {
+        int fd_log = open(path_log, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (fd_log != -1) close(fd_log);
+        chmod(path_log, 0644);//set specified permissions
+    }
+    chmod(path_dat, 0664); //set specified permissions for reports.dat file
+    //capture input data
+    Report new_report;
+    printf("Report ID:"); scanf("%d",&new_report.id);
+    printf("Latitude: "); scanf("%f", &new_report.gps.lat);
+    printf("Longitude: "); scanf("%f", &new_report.gps.lng);
+    getchar(); // Clear newline <-put this in AI file
+    printf("Category (road/lighting/flooding/other): ");
+    fgets(new_report.issue_categ, 30, stdin);
+    new_report.issue_categ[strcspn(new_report.issue_categ, "\n")] = 0;
+    printf("Severity level (1/2/3): ");
+    scanf("%d", &new_report.sev_lvl);
+    getchar(); // Clear newline
+    printf("Description: ");
+    fgets(new_report.desc, 100, stdin);
+    new_report.desc[strcspn(new_report.desc, "\n")] = 0;
+    new_report.timestamp = time(NULL);
+    strncpy(new_report.ins_name, user, 30);
+    //check for necessary permissions
+    if (check_permission(path_dat, role, 'w')==0) {
+        printf("Error: %s %s does not have permission to write in file.",role,user);
+        return;
+    }
     //write the data to the newly created file
-    int fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0664); //open the file, pipeline a series of flags:
+    int fd = open(path_dat, O_WRONLY | O_CREAT | O_APPEND, 0664); //open the file, pipeline a series of flags:
     //open to writitng only, create if not created, otherwise no effect and file offset shall be set to the end of the file prior to each write
     if (fd == -1) {
         printf("Failed to open reports file");
@@ -108,7 +164,9 @@ void add_report(char *district_id,char *role,char *user) {
         printf("Failed to write report");
     }
     close(fd);
+    manage_symlink(district_id, path_dat); //creates/updates symbolic link pointing to reports.dat file
     printf("Successfully added report to reports file");
+    write_in_log(district_id, role, user, "add", new_report.timestamp); //log in the addition
 }
 void symbolic_form(mode_t mode,char str[]) {
     //check permissions for user -> first 3 characters of permissions string
@@ -135,7 +193,7 @@ void symbolic_form(mode_t mode,char str[]) {
     //null terminator for string
     str[9]='\0';
 }
-void list(const char *district_id,const char *role) {
+void list(char *district_id,char *role,char *user) {
     //create the full path for the report file
     char path[512];
     snprintf(path, sizeof(path), "%s/reports.dat", district_id);
@@ -169,12 +227,12 @@ void list(const char *district_id,const char *role) {
     }
     Report rep;
     while (read(fd,&rep,sizeof(Report))==sizeof(Report)) {
-        //Q: trb sa afis toate datele unui report?
-        printf("Report %d submitted by %s: %s\n",rep.id,rep.ins_name,rep.desc);
+        printf("Report %d submitted by %s at %lld , at coordinates: %.4f %.4f: issue category(%s),severity level(%d),description(%s)\n",rep.id,rep.ins_name,rep.timestamp,rep.gps.lat,rep.gps.lng,rep.issue_categ,rep.sev_lvl,rep.desc);
     }
     close(fd);
+    write_in_log(district_id, role, user, "list", time(NULL)); //log in the listing
 }
-void view(char *district_id,int report_id,char *role) {
+void view(char *district_id,int report_id,char *role,char *user) {
     char path[512];
     snprintf(path, sizeof(path), "%s/reports.dat", district_id);
     //check for necessary permissions
@@ -207,8 +265,9 @@ void view(char *district_id,int report_id,char *role) {
     }
     if (ok==0) printf("Could not find report %d.",report_id);
     close(fd);
+    write_in_log(district_id, role, user, "view", time(NULL)); //log in the viewing
 }
-void remove_report(const char *district_id,int report_id,const char *role) {
+void remove_report(char *district_id,int report_id,char *role,char *user) {
     if (strcmp(role,"manager")!=0) {
         printf("Only managers can perform this operation!");
         return;
@@ -226,16 +285,22 @@ void remove_report(const char *district_id,int report_id,const char *role) {
         printf("Could not open file for reading/writing");
         return;
     }
+    //get the initial size of the file
+    struct stat st;
+    fstat(fd, &st);
+    long total_size = st.st_size;
     Report rep;
     long pos=-1;
     while (read(fd,&rep,sizeof(Report))==sizeof(Report)) {
         if (rep.id == report_id) {
-            report_count--;
             pos=lseek(fd,0,SEEK_CUR)-sizeof(Report); //starting position of the report we must delete
             break;
         }
     }
-    if (pos==-1) return;
+    if (pos==-1) {
+        close(fd);
+        return; //report was not found
+    }
     long current_pos=pos;
     while (1) {
         lseek(fd,current_pos+sizeof(Report),SEEK_SET); //shift forward one record
@@ -247,10 +312,11 @@ void remove_report(const char *district_id,int report_id,const char *role) {
         write(fd,&rep,sizeof(Report));//overwrite it with the data that was just read
         current_pos+=sizeof(Report); //advance through the reports
     }
-    if (pos!=-1) ftruncate(fd,report_count*sizeof(Report)); //readjusts file size to one less report
+    if (ftruncate(fd,total_size-sizeof(Report))==-1) printf("Error truncating file"); //readjusts file size to one less report
     close(fd);
+    write_in_log(district_id, role, user, "remove_report", time(NULL)); //log in the removal
 }
-void update_treshold(char *district_id,int value,char *role) {
+void update_treshold(char *district_id,int value,char *role,char *user) {
     if (strcmp(role,"manager")!=0) {
         printf("Only managers can perform this operation!");
         return;
@@ -258,11 +324,21 @@ void update_treshold(char *district_id,int value,char *role) {
     char path[512];
     snprintf(path, sizeof(path), "%s/district.cfg", district_id);
     //check for necessary permissions
+
+    //explicitly check for 640 permission as specified in the project description
+    struct stat st;
+    if (stat(path, &st) == -1) return; //file does not exist
+    char permissions[10];
+    symbolic_form(st.st_mode,permissions);
+    if (!(st.st_mode & S_IRUSR & S_IWUSR & S_IRGRP)){ //file does not have required permission -> 640
+        printf("Current user does not have required permissions(640), instead has:%s",permissions);
+        return;
+    }
     if (check_permission(path, role, 'w')==0) {
         printf("Error: %s does not have permission to write in reports file in %s.",role,district_id);
         return;
     }
-    //q: trebuie sa mai verific o data explicit 640? ce inseamna diagnostic?
+
     //open configuration file
     int fd = open(path, O_WRONLY | O_TRUNC); //O_TRUNC empties file before writing in it
     if (fd == -1) {
@@ -275,25 +351,51 @@ void update_treshold(char *district_id,int value,char *role) {
         printf("Error writing to file");
     }
     close(fd);
+    write_in_log(district_id, role, user, "update_treshold", time(NULL)); //log in the update
 }
 int main(int argc, char * argv[]) {
-    //Q: erorile trebuie afisate in log sau intr-un fisier dedicat pt erori? (stderr)
-    //Implementation steps:
-    //1. Parse command line arguments (--role, --user, --add, etc.)
-    //Q: cum arata o lista de agrs?
-    //Q: de unde luam datele pt fiecare report?
-    if (argc!=5) {
+    /*  uncomment on linux -> lstat() is posix only
+    //check for dangling symbolic links
+    struct dirent *entry;
+    DIR *dp = opendir(".");
+    if (dp != NULL) {
+        while ((entry = readdir(dp))) {
+            struct stat l_st, s_st;
+            //check if the entry is a symbolic link
+            if (lstat(entry->d_name, &l_st) == 0 && S_ISLNK(l_st.st_mode)) {
+                //use stat to see if the target exists
+                if (stat(entry->d_name, &s_st) == -1) {
+                    printf("Dangling link detected -> %s\n", entry->d_name);
+                }
+            }
+        }
+        closedir(dp);
+    }*/
+    if (argc<6) {
         printf("Wrong number of arguments.");
         exit(-1);
     }
-    char *dir=NULL,*role=NULL,*name=NULL,*command=NULL;
-    strcpy(dir,argv[1]); //1st arg-> main directory name (city_manager)
-    strcpy(role,argv[2]); //2nd arg-> role(inspector or manager)
-    strcpy(name,argv[3]); //3rd arg-> name of user
-    strcpy(command,argv[4]); //4th arg-> operation
-    //2. Validate roles (Manager vs Inspector)
-    //3. Call functions for action
+    //parsing the arguments
+    char *role = argv[2]; //2nd arg-> role(inspector or manager)
+    char *name = argv[4]; //4th arg-> name of user
+    char *command = argv[5];//5th arg -> operation
+    char *dir = argv[6];//6th agr -> dir name
+    if(strstr(command,"add")) add_report(dir,role,name);
+    if(strstr(command,"list")) list(dir,role,name);
+    if(strstr(command,"view")) {
+        int id=atoi(argv[7]);
+        view(dir,id,role,name);
+    }
+    if(strstr(command,"remove_report")) {
+        int id=atoi(argv[7]);
+        remove_report(dir,id,role,name);
+    }
+    if(strstr(command,"update_treshold")) {
+        int val=atoi(argv[7]);
+        update_treshold(dir,val,role,name);
+    }
+    if(strstr(command,"filter")){
 
-    printf("Hello World\n");
+    }
     return 0;
 }
