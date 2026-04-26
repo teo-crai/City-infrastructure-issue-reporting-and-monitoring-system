@@ -34,7 +34,10 @@ int match_condition(Report r, const char *field, const char *op, const char *val
 
 Mistake: Gemini interpreted the format as field op value, with spaces in between, when 
 the format is actually field:op:value, clearly specified in the document. I made the change accordingly.
-The second function was correctly generated.
+Mistake: In the match_condition function, instead of checking for the specified keywords: severity, category, inspector, timestamp, it checked for matches with the names
+I gave to the report struct fields, like sev_lvl, issue_categ, ins_name and instead of the timestamp it checked for the id. It also did not check for
+all the listed permitted operators ==, !=, <, <=, >, >=, only for ==, > and <. It seems like Gemini had a hard time following all instructions in the document,
+only focusing on the larger details. I manually changed the function to include the necessary comparisons.
 2.In the add_report function, the user has to enter the details about the report in the console.
 Gemini suggested adding calls such as "getchar();" and "new_report.desc[strcspn(new_report.desc, "\n")] = 0;"
 in order to remove the endline character read and stored by fgets(), because it could be problematic for my filter

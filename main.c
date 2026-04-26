@@ -353,7 +353,7 @@ void update_treshold(char *district_id,int value,char *role,char *user) {
     close(fd);
     write_in_log(district_id, role, user, "update_treshold", time(NULL)); //log in the update
 }
-// AI-GENERATED: Function to parse a condition string like "sev_lvl > 1"
+// AI-GENERATED: Function to parse a condition string like "sev_lvl:>:1"
 int parse_condition(const char *cond_str, char *field, char *op, char *val) {
     // Expected format: "field:op:value"
     if (sscanf(cond_str, "%s:%s:%s", field, op, val) != 3) {
@@ -363,25 +363,36 @@ int parse_condition(const char *cond_str, char *field, char *op, char *val) {
 }
 // AI-GENERATED: Function to check if a report matches the parsed condition
 int match_condition(Report r, const char *field, const char *op, const char *val) {
-    if (strcmp(field, "sev_lvl") == 0) {
+    if (strcmp(field, "severity") == 0) {
         int v = atoi(val);
         if (strcmp(op, "==") == 0) return r.sev_lvl == v;
+        if (strcmp(op, "!=") == 0) return r.sev_lvl != v;
         if (strcmp(op, ">") == 0)  return r.sev_lvl > v;
+        if (strcmp(op, ">=") == 0)  return r.sev_lvl >= v;
         if (strcmp(op, "<") == 0)  return r.sev_lvl < v;
+        if (strcmp(op, "<=") == 0)  return r.sev_lvl <= v;
     }
-    else if (strcmp(field, "issue_categ") == 0) {
+    else if (strcmp(field, "category") == 0) {
         if (strcmp(op, "==") == 0) return strcmp(r.issue_categ, val) == 0;
+        if (strcmp(op, "!=") == 0) return strcmp(r.issue_categ, val) != 0;
     }
-    else if (strcmp(field, "id") == 0) {
-        int v = atoi(val);
-        if (strcmp(op, "==") == 0) return r.id == v;
+    else if (strcmp(field, "timestamp") == 0) {
+        time_t v = (time_t)atoll(val); //convert string value to time_t
+
+        if (strcmp(op, "==") == 0) return r.timestamp == v;
+        if (strcmp(op, "!=") == 0) return r.timestamp != v;
+        if (strcmp(op, ">") == 0)  return r.timestamp > v;
+        if (strcmp(op, ">=") == 0) return r.timestamp >= v;
+        if (strcmp(op, "<") == 0)  return r.timestamp < v;
+        if (strcmp(op, "<=") == 0) return r.timestamp <= v;
     }
-    else if (strcmp(field, "ins_name") == 0) {
+    else if (strcmp(field, "inspector") == 0) {
         if (strcmp(op, "==") == 0) return strcmp(r.ins_name, val) == 0;
+        if (strcmp(op, "==") == 0) return strcmp(r.ins_name, val) != 0;
     }
     return 0; // No match or unknown field
 }
-void filter(char *district_id,char *condition,char *role,char *user) {
+void filter(char *district_id,int num_of_conditions,char *conditions[],char *role,char *user) {
     char path[512];
     snprintf(path, sizeof(path), "%s/reports.dat", district_id);
     //check read permissions for file
@@ -395,18 +406,26 @@ void filter(char *district_id,char *condition,char *role,char *user) {
         printf("Could not open file for reading");
         return;
     }
-    //call parse function
-    char field[30], op[5], val[100];
-    if (!parse_condition(condition, field, op, val)) {
-        printf("Invalid condition format.'\n");
-        return;
-    }
     Report rep;
     int rep_count=0; //variable that counts the number of reports that match the condition/s
     //loop through file until we find the report/s
     while (read(fd,&rep,sizeof(Report))==sizeof(Report)) {
-        //call match function
-        if (match_condition(rep,field, op, val)) {
+        int match_all=1; //variable that checks if all given conditions are matched
+        for (int i=0;i<num_of_conditions;i++){
+            //call parse function
+            char field[30], op[5], val[100];
+            if (!parse_condition(conditions[i], field, op, val)) {
+                printf("Invalid condition format.'\n");
+                match_all=0; //if parsing fails, we can't match our condition
+                break;
+            }
+            //call match function
+            if (!match_condition(rep,field, op, val)){
+                match_all=0; //if one condition isn't met, the report is not valid, as the conditions are joined by AND
+                break;
+            }
+        }
+        if (match_all==1) {
             rep_count++;
             printf("Report %d submitted by %s at %lld , at coordinates: %.4f %.4f: issue category(%s),severity level(%d),description(%s)\n",rep.id,rep.ins_name,rep.timestamp,rep.gps.lat,rep.gps.lng,rep.issue_categ,rep.sev_lvl,rep.desc);
         }
@@ -457,7 +476,9 @@ int main(int argc, char * argv[]) {
         update_treshold(dir,val,role,name);
     }
     if(strstr(command,"filter")){
-        filter(dir, argv[7], role, name);
+        int num_of_conditions=argc-7; //we know what the first 7 arguments are, so the rest are all conditions for filter
+        char **conditions=&argv[7]; //points to the first condition string
+        filter(dir, num_of_conditions, conditions, role, name);
     }
     return 0;
 }
