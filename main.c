@@ -84,7 +84,7 @@ void write_in_log(char *district_id,char *role,char *user,char *command,time_t t
         return;
     }
     FILE *f=fopen(path,"a");
-    fprintf(f,"%lld    %s  %s  %s\n",timestamp,role,user,command);
+    fprintf(f,"%ld    %s  %s  %s\n",timestamp,role,user,command);
     fclose(f);
 }
 void manage_symlink(const char *district_id, const char *target_path) {
@@ -121,16 +121,23 @@ void add_report(char *district_id,char *role,char *user) {
         if (fd_cfg != -1) {
             write(fd_cfg, "1", 1); //default severity threshold
             close(fd_cfg);
-            chmod(path_cfg, 0640); //set specified permissions
         }
     }
+    chmod(path_cfg, 0640); //set specified permissions
     //initialize logged_district if it doesn't exist
     if (stat(path_log, &st) == -1) {
         int fd_log = open(path_log, O_WRONLY | O_CREAT | O_TRUNC, 0644);
         if (fd_log != -1) close(fd_log);
-        chmod(path_log, 0644);//set specified permissions
+
     }
-    chmod(path_dat, 0664); //set specified permissions for reports.dat file
+    chmod(path_log, 0644);//set specified permissions
+    //initialize reports.dat if it doesn't exist
+    if (stat(path_dat, &st) == -1) {
+        int fd_dat = open(path_dat, O_WRONLY | O_CREAT | O_TRUNC, 0664);
+        if (fd_dat != -1) close(fd_dat);
+
+    }
+    chmod(path_dat, 0664);//set specified permissions
     //capture input data
     Report new_report;
     printf("Report ID:"); scanf("%d",&new_report.id);
@@ -227,7 +234,7 @@ void list(char *district_id,char *role,char *user) {
     }
     Report rep;
     while (read(fd,&rep,sizeof(Report))==sizeof(Report)) {
-        printf("Report %d submitted by %s at %lld , at coordinates: %.4f %.4f: issue category(%s),severity level(%d),description(%s)\n",rep.id,rep.ins_name,rep.timestamp,rep.gps.lat,rep.gps.lng,rep.issue_categ,rep.sev_lvl,rep.desc);
+        printf("Report %d submitted by %s at %ld , at coordinates: %.4f %.4f: issue category(%s),severity level(%d),description(%s)\n",rep.id,rep.ins_name,rep.timestamp,rep.gps.lat,rep.gps.lng,rep.issue_categ,rep.sev_lvl,rep.desc);
     }
     close(fd);
     write_in_log(district_id, role, user, "list", time(NULL)); //log in the listing
@@ -330,7 +337,9 @@ void update_treshold(char *district_id,int value,char *role,char *user) {
     if (stat(path, &st) == -1) return; //file does not exist
     char permissions[10];
     symbolic_form(st.st_mode,permissions);
-    if (!(st.st_mode & S_IRUSR & S_IWUSR & S_IRGRP)){ //file does not have required permission -> 640
+    mode_t expected_perms = S_IRUSR | S_IWUSR | S_IRGRP;
+    mode_t perm_mask = S_IRWXU | S_IRWXG | S_IRWXO;
+    if ((st.st_mode & perm_mask) != expected_perms){ //file does not have required permission -> 640
         printf("Current user does not have required permissions(640), instead has:%s",permissions);
         return;
     }
@@ -356,7 +365,7 @@ void update_treshold(char *district_id,int value,char *role,char *user) {
 // AI-GENERATED: Function to parse a condition string like "sev_lvl:>:1"
 int parse_condition(const char *cond_str, char *field, char *op, char *val) {
     // Expected format: "field:op:value"
-    if (sscanf(cond_str, "%s:%s:%s", field, op, val) != 3) {
+    if (sscanf(cond_str, "%[^:]:%[^:]:%s", field, op, val) != 3) {
         return 0; // Failed to parse
     }
     return 1;
@@ -427,7 +436,7 @@ void filter(char *district_id,int num_of_conditions,char *conditions[],char *rol
         }
         if (match_all==1) {
             rep_count++;
-            printf("Report %d submitted by %s at %lld , at coordinates: %.4f %.4f: issue category(%s),severity level(%d),description(%s)\n",rep.id,rep.ins_name,rep.timestamp,rep.gps.lat,rep.gps.lng,rep.issue_categ,rep.sev_lvl,rep.desc);
+            printf("Report %d submitted by %s at %ld , at coordinates: %.4f %.4f: issue category(%s),severity level(%d),description(%s)\n",rep.id,rep.ins_name,rep.timestamp,rep.gps.lat,rep.gps.lng,rep.issue_categ,rep.sev_lvl,rep.desc);
         }
     }
     if (rep_count==0) printf("No report matches given condition."); //display message if no matching reports were found
@@ -435,7 +444,7 @@ void filter(char *district_id,int num_of_conditions,char *conditions[],char *rol
     write_in_log(district_id, role, user, "filter", time(NULL));
 }
 int main(int argc, char * argv[]) {
-    /*  uncomment on linux -> lstat() is posix only
+    //  uncomment on linux -> lstat() is posix only
     //check for dangling symbolic links
     struct dirent *entry;
     DIR *dp = opendir(".");
@@ -451,7 +460,7 @@ int main(int argc, char * argv[]) {
             }
         }
         closedir(dp);
-    }*/
+    }
     if (argc<6) {
         printf("Wrong number of arguments.");
         exit(-1);
