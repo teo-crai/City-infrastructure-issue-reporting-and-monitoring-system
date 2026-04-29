@@ -4,6 +4,7 @@
 #include <time.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <dirent.h>
@@ -174,6 +175,36 @@ void add_report(char *district_id,char *role,char *user) {
     manage_symlink(district_id, path_dat); //creates/updates symbolic link pointing to reports.dat file
     printf("Successfully added report to reports file");
     write_in_log(district_id, role, user, "add", new_report.timestamp); //log in the addition
+}
+void remove_district(char *district_id, char *role, char *user){
+    if (strcmp(role,"manager")!=0) {
+        printf("Only managers can perform this operation!");
+        return;
+    }
+    pid_t pid=fork(); //creating child process for removal of directory
+    if(pid<0){
+        printf("Error in creating child process.");
+        return;
+    }
+    else if(pid==0){ //pid=0 means we are in the child process
+        char *arguments[]={"rm","-rf",district_id,NULL};
+        execvp("rm",arguments);
+        exit(0);
+    }
+    else{ //pid<0 means we're in the parent process
+        int status_ptr;
+        if(waitpid(pid,&status_ptr,WUNTRACED)==-1){ //wait for child project to end
+            printf("Error: Child process did not end.");
+            return;
+        }
+        if(status_ptr==0){ //check if child's return status is 0 -> uccessfully completed the removal
+            //in this case, the corresponding simlink can be deleted
+            char link_name[128];
+            snprintf(link_name, sizeof(link_name), "active_reports-%s", district_id);
+            if(unlink(link_name)==-1)//if the name referred to a symbolic link, the link is removed
+                printf("Error in unlinking symbolic file.");
+        }
+    }
 }
 void symbolic_form(mode_t mode,char str[]) {
     //check permissions for user -> first 3 characters of permissions string
@@ -480,6 +511,7 @@ int main(int argc, char * argv[]) {
         int id=atoi(argv[7]);
         remove_report(dir,id,role,name);
     }
+    if(strstr(command,"remove_district")) remove_district(dir,role,name);
     if(strstr(command,"update_treshold")) {
         int val=atoi(argv[7]);
         update_treshold(dir,val,role,name);
