@@ -1,3 +1,4 @@
+PHASE 1:
 Tool used: Gemini
 1.First prompt I gave was "Help me write this filter function for my project"
 I attached a file of my full code, containing all functions except for filter,
@@ -45,3 +46,20 @@ function: will break your filter comparisons later because "road\n" does not equ
 3.I also used Gemini to generate inputs, which I have stored in the input.txt file, with this
 prompt:give me a series of prompts to test my program: 5 additions, one list, one view of the 2nd report, one update treshold,  
 one filter, removal of the first,last and middle reports and one final list
+
+PHASE 2:
+I used Gemini to debug my code. I gave it the monitor_reports.c file and the description of the monitor_reports part of phase 2, alongside the
+functions we are recommended to use (or forbidden to), asking it to check why my program ends abruptly.
+The big problem: my program was reaching return 0 before receiving any signal. 
+The suggested fix: 
+while (!end_process) {
+    pause(); 
+}
+You need a while loop at the end of main so the process doesn't just reach return 0 and die immediately.
+Using pause() is much better than a busy-wait loop like while(1);
+A busy-wait would spike your CPU usage to 100%, whereas pause() tells the OS to wake the process up only when a signal arrives.
+This way, the program will only continue past the loop after it receives an ending signal(SIGINT in this case).
+
+Other suggestions were using write() instead of printf in my signal handling function, because printf() uses a buffer that can lead to deadlocks if a signal interrupts another I/O call,
+whereas write() safe to call even if the signal interrupts another I/O operation, and changing my global int variable end_process to volatile sig_atomic_t. This seems a bit overkill
+as the int variable works just fine, it feels like a higher level modification that does not reflect my level of understanding OS.

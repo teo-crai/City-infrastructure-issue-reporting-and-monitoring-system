@@ -4,4 +4,5 @@ project(proiect_SO C)
 set(CMAKE_C_STANDARD 11)
 
 add_executable(proiect_SO
-        main.c)
+        city_manager.c
+        monitor_reports.c)

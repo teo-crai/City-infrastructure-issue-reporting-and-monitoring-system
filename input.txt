@@ -19,3 +19,11 @@
 ./city_manager --role manager --user alice --list downtown
 
 cat downtown/logged_district
+
+Q for phase 2:
+Ce permisiuni pt hidden file?
+if (sigaction(SIGUSR1, &sa, NULL) == -1) {
+        sa fac unlink si aici? c
+        printf("Error setting up SIGUSR1");
+        exit(-1);
+    }

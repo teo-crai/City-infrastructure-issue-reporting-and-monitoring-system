@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <dirent.h>
+#include <signal.h>
 typedef struct {
     float lat,lng; //latitude and longitude
 }GPS_coord;
@@ -175,6 +176,29 @@ void add_report(char *district_id,char *role,char *user) {
     manage_symlink(district_id, path_dat); //creates/updates symbolic link pointing to reports.dat file
     printf("Successfully added report to reports file");
     write_in_log(district_id, role, user, "add", new_report.timestamp); //log in the addition
+    //obtaining the pid from monitor_reports.c
+    int monitor_informed = 0; //binary variable to check if we were able to send the signal to the monitor
+    FILE *fp = fopen(".monitor_pid", "r");
+    if (fp!=NULL) {
+        int monitor_pid;
+        if (fscanf(fp, "%d", &monitor_pid) == 1) {
+            //send SIGUSR1 signal to the monitor
+            if (kill(monitor_pid, SIGUSR1) == 0) {
+                monitor_informed = 1;
+            }
+        }
+    }
+    else printf("Failed to open hidden file in add_report function.");
+    //writing a message based on if the program succesfully received the signal or an error occured
+    char notification_msg[128];
+    if (monitor_informed) {
+        snprintf(notification_msg, sizeof(notification_msg), "Monitor notified (PID found)");
+    }
+    else {
+        snprintf(notification_msg, sizeof(notification_msg), "Monitor could NOT be informed (PID not found or signal failed)");
+    }
+    write_in_log(district_id, role, user, notification_msg, new_report.timestamp); //log in the succesful/failed monitoring of addition
+    fclose(fp);
 }
 void remove_district(char *district_id, char *role, char *user){
     if (strcmp(role,"manager")!=0) {
