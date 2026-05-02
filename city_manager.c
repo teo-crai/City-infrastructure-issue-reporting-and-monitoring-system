@@ -187,6 +187,7 @@ void add_report(char *district_id,char *role,char *user) {
                 monitor_informed = 1;
             }
         }
+        fclose(fp);
     }
     else printf("Failed to open hidden file in add_report function.");
     //writing a message based on if the program succesfully received the signal or an error occured
@@ -198,7 +199,6 @@ void add_report(char *district_id,char *role,char *user) {
         snprintf(notification_msg, sizeof(notification_msg), "Monitor could NOT be informed (PID not found or signal failed)");
     }
     write_in_log(district_id, role, user, notification_msg, new_report.timestamp); //log in the succesful/failed monitoring of addition
-    fclose(fp);
 }
 void remove_district(char *district_id, char *role, char *user){
     if (strcmp(role,"manager")!=0) {

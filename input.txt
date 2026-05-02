@@ -27,3 +27,4 @@ if (sigaction(SIGUSR1, &sa, NULL) == -1) {
         printf("Error setting up SIGUSR1");
         exit(-1);
     }
+Cum dam SIGINT la fisher? din terminal?
