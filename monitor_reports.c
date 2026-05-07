@@ -6,10 +6,6 @@
 #include <string.h>
 #include <sys/stat.h>
 int end_process=0;
-/*
-// volatile sig_atomic_t is the "best practice" way to handle signal flags
-volatile sig_atomic_t end_process = 0; ????
- */
 static void handler(int signum)
 {
     char msg_SIGINT[]="Caught SIGINT. Ending process.\n";
@@ -49,10 +45,12 @@ int main() {
     //handle signals with sigaction()
     if (sigaction(SIGUSR1, &sa, NULL) == -1) {
         printf("Error setting up SIGUSR1");
+        unlink(path_hidden);
         exit(-1);
     }
     if (sigaction(SIGINT, &sa, NULL) == -1) {
         printf("Error setting up SIGINT");
+        unlink(path_hidden);
         exit(-1);
     }
     //loop to keep the program running while waiting for any signal; without this, it would reach return 0 and interrupt too early
