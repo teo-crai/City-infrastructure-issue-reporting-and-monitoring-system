@@ -5,4 +5,5 @@ set(CMAKE_C_STANDARD 11)
 
 add_executable(proiect_SO
         city_manager.c
-        monitor_reports.c)
+        monitor_reports.c
+        city_hub.c)

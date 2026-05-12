@@ -27,6 +27,26 @@ int main() {
     //create hidden file path
     char path_hidden[128];
     snprintf(path_hidden, sizeof(path_hidden), ".monitor_pid");
+    /*
+    //check if another monitor already exists
+    int fd_check = open(path_hidden, O_RDONLY);
+    if (fd_check != -1)
+    {
+        char buffer[32];
+        int n = read(fd_check,buffer,sizeof(buffer) - 1);
+        close(fd_check);
+        if (n > 0)
+        {
+            buffer[n] = '\0';
+            pid_t existing_pid = atoi(buffer);
+            //kill(pid, 0) checks if process exists
+            if (kill(existing_pid, 0) == 0)
+            {
+                printf("Error:Monitor already running, pid=%d\n",existing_pid);
+                exit(-1);
+            }
+        }
+    }*/
     //open file
     int fd = open(path_hidden, O_WRONLY |  O_CREAT  | O_TRUNC, 0644); //O_TRUNC empties file before writing in it -> overwriting
     if (fd == -1) {
