@@ -27,7 +27,6 @@ int main() {
     //create hidden file path
     char path_hidden[128];
     snprintf(path_hidden, sizeof(path_hidden), ".monitor_pid");
-    /*
     //check if another monitor already exists
     int fd_check = open(path_hidden, O_RDONLY);
     if (fd_check != -1)
@@ -46,11 +45,11 @@ int main() {
                 exit(-1);
             }
         }
-    }*/
+    }
     //open file
     int fd = open(path_hidden, O_WRONLY |  O_CREAT  | O_TRUNC, 0644); //O_TRUNC empties file before writing in it -> overwriting
     if (fd == -1) {
-        printf("Could not open file for writing");
+        printf("Error in opening file for writing");
         exit(-1);
     }
     //writing the process id in the hidden file
