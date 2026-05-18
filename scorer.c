@@ -32,6 +32,16 @@ int found_inspector(char *inspector) {
     return -1;
 }
 void score(char *district_id) {
+    //check if district directory exists
+    struct stat st;
+    if (stat(district_id, &st) == -1) {
+        printf("Directory %s does not exist.\n",district_id);
+        exit(-1);
+    }
+    if (!S_ISDIR(st.st_mode)) {
+        printf("Not a directory.\n");
+        exit(-1);
+    }
     //create the full path for the report file
     char path[512];
     snprintf(path, sizeof(path), "%s/reports.dat", district_id);
